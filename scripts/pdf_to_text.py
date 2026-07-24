@@ -1,19 +1,11 @@
-from pathlib import Path
 import fitz
+from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+pdf = Path(r"imports/vtb/Выписка ВТБ по кредиту на авто.pdf")
 
-pdf = ROOT / "imports" / "vtb" / "Выписка ВТБ по кредитной карте.pdf"
-txt = ROOT / "imports" / "vtb" / "Выписка ВТБ по кредитной карте.txt"
+txt = pdf.with_suffix(".txt")
 
-print("PDF :", pdf)
-print("TXT :", txt)
-
-if not pdf.exists():
-    print("ФАЙЛ НЕ НАЙДЕН!")
-    raise SystemExit
-
-doc = fitz.open(str(pdf))
+doc = fitz.open(pdf)
 
 with open(txt, "w", encoding="utf-8") as f:
     for page in doc:
@@ -22,5 +14,7 @@ with open(txt, "w", encoding="utf-8") as f:
 
 doc.close()
 
-print("\nГОТОВО")
-print(txt)
+print(f"PDF : {pdf.resolve()}")
+print(f"TXT : {txt.resolve()}")
+print()
+print("ГОТОВО")
