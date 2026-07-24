@@ -25,6 +25,7 @@ def create_document_id(file):
     return hashlib.md5(data).hexdigest()
 
 
+
 def process_pdf(file):
 
     print("Тип файла : PDF")
@@ -34,6 +35,7 @@ def process_pdf(file):
 
     document_id = create_document_id(file)
 
+
     if document_exists(document_id):
 
         print()
@@ -41,6 +43,7 @@ def process_pdf(file):
         print("Импорт пропущен.")
 
         return
+
 
     pdf = fitz.open(file)
 
@@ -51,6 +54,8 @@ def process_pdf(file):
 
     pdf.close()
 
+
+
     with open(
         "reports/last_import.txt",
         "w",
@@ -59,9 +64,13 @@ def process_pdf(file):
 
         report.write(text)
 
+
+
     document = build_document(text)
 
+
     parser = detect_parser(document.text)
+
 
     if parser is None:
 
@@ -71,9 +80,19 @@ def process_pdf(file):
 
         return
 
+
+
     statement = parser.parse(document)
 
+
+
     operations = statement.operations
+
+
+
+    # --------------------------------------------------
+    # Обработка обычных операций
+    # --------------------------------------------------
 
     for operation in operations:
 
@@ -81,16 +100,21 @@ def process_pdf(file):
         operation.account = statement.account
         operation.owner = statement.owner
 
-        # Нормализуем описание
+
         operation.description = normalize_description(
             operation.description
         )
 
+
         normalize_operation(operation)
+
+
 
     operations = remove_internal_transfers(
         operations
     )
+
+
 
     save_document(
         document_id,
@@ -98,17 +122,27 @@ def process_pdf(file):
         statement.bank
     )
 
-    save_operations(
-        operations,
-        document_id
-    )
+
+    # Сохраняем операции только если они есть
+
+    if operations:
+
+        save_operations(
+            operations,
+            document_id
+        )
+
+
 
     print()
+
 
     print(
         f"Внутренних переводов найдено: "
         f"{sum(1 for x in operations if getattr(x, 'internal_transfer', False))}"
     )
+
+
 
     print()
 
@@ -119,11 +153,60 @@ def process_pdf(file):
     print(f"Счет       : {statement.account}")
     print(f"Владелец   : {statement.owner}")
 
+
+
+    # --------------------------------------------------
+    # Вывод кредита
+    # --------------------------------------------------
+
+    if hasattr(statement, "loan"):
+
+        print()
+        print("===== КРЕДИТ =====")
+
+        loan = statement.loan
+
+
+        print(
+            f"Тип        : {getattr(loan, 'loan_type', '')}"
+        )
+
+        print(
+            f"Договор    : {getattr(loan, 'contract_number', '')}"
+        )
+
+        print(
+            f"Остаток    : {getattr(loan, 'balance', 0)} RUB"
+        )
+
+
+
+        if hasattr(statement, "loan_summary"):
+
+            print()
+
+            print("Расчет:")
+
+
+            for key, value in statement.loan_summary.items():
+
+                print(
+                    f"{key:20}: {value}"
+                )
+
+
+
     print()
+
     print("===== Операции =====")
 
+
     for operation in operations[:10]:
+
         print(operation)
 
+
+
     print()
+
     print("Импорт завершен.")

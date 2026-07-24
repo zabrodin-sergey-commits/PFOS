@@ -1,55 +1,25 @@
+import re
+
 from models.statement import FinancialStatement
+from models.operation import Operation
 
-from parsers.base_parser import BaseParser
-
-from parsers.rules.account_rule import find_account
-from parsers.rules.owner_rule import find_owner
-
-from parsers.vtb.operations_parser import parse_operations
-from parsers.vtb.credit_card_parser import parse_credit_card_operations
+from parsers.vtb.loan_parser import parse_loan
 
 
-class VTBParser(BaseParser):
+class VTBParser:
 
-    def can_parse(self, text: str):
+    name = "VTBParser"
 
-        text = text.lower()
 
-        keywords = [
-            "втб",
-            "банк втб",
-            "vtb",
-            "счёту",
-            "счету",
-            "кредитная карта",
-            "кредитный лимит",
-            "номер счёта",
-            "номер счета",
-        ]
-
-        return any(word in text for word in keywords)
-
-    def is_credit_card(self, text):
+    def can_parse(self, text: str) -> bool:
 
         text = text.lower()
 
         return (
-            "кредитная карта" in text
-            or "кредитный лимит" in text
-            or "общая сумма задолженности" in text
-            or "беспроцентный период" in text
+            "втб" in text
+            or "банк втб" in text
         )
 
-    def is_credit_document(self, text):
-
-        text = text.lower()
-
-        return (
-            "график платежей" in text
-            or "остаток задолженности по кредиту" in text
-            or "ежемесячный платеж" in text
-            or "сумма кредита" in text
-        )
 
     def parse(self, document):
 
@@ -58,29 +28,100 @@ class VTBParser(BaseParser):
         statement = FinancialStatement()
 
         statement.bank = "ВТБ"
-        statement.version = "3"
 
-        statement.account = find_account(text)
-        statement.owner = find_owner(text)
 
-        if self.is_credit_card(text):
-
-            statement.document_type = "Кредитная карта"
-
-            statement.operations = parse_credit_card_operations(text)
-
-            return statement
+        # ---------------------------------------------
+        # Кредит
+        # ---------------------------------------------
 
         if self.is_credit_document(text):
+
+            loan_data = parse_loan(text)
 
             statement.document_type = "Кредит"
 
             statement.operations = []
 
+            statement.loan = loan_data["loan"]
+
+            statement.loan_summary = {
+                "issued": loan_data["issued"],
+                "principal_paid": loan_data["principal_paid"],
+                "interest_paid": loan_data["interest_paid"],
+                "balance": loan_data["balance"],
+            }
+
             return statement
 
-        statement.document_type = "Выписка по счету"
 
-        statement.operations = parse_operations(text)
+        # ---------------------------------------------
+        # Обычная выписка
+        # ---------------------------------------------
+
+        statement.document_type = "Выписка"
+
+        statement.operations = self.extract_operations(text)
 
         return statement
+
+
+
+    def is_credit_document(self, text):
+
+        lower = text.lower()
+
+        return (
+            "выдача кредита" in lower
+            or "погашение кредита" in lower
+            or "погашение процентов" in lower
+        )
+
+
+
+    def extract_operations(self, text):
+
+        operations = []
+
+
+        pattern = re.compile(
+            r"(\d{2}\.\d{2}\.\d{4}).*?"
+            r"(-?[0-9\s\xa0,\.]+)\s*RUB.*?"
+            r"(Переводы через СБП|Оплата товаров и услуг|Зачисление перевода)",
+            re.DOTALL,
+        )
+
+
+        for date, amount, description in pattern.findall(text):
+
+            amount = (
+                amount
+                .replace("\xa0", "")
+                .replace(" ", "")
+                .replace(",", ".")
+            )
+
+
+            try:
+                amount = float(amount)
+
+            except Exception:
+                continue
+
+
+            operation = Operation()
+
+            operation.date = date
+            operation.amount = abs(amount)
+            operation.description = description
+
+
+            if amount >= 0:
+                operation.type = "income"
+            else:
+                operation.type = "expense"
+
+
+            operations.append(operation)
+
+
+        return operations
