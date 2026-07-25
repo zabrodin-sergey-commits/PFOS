@@ -5,7 +5,6 @@ from pathlib import Path
 DB_PATH = Path("database/pfos.db")
 
 
-
 def get_connection():
 
     return sqlite3.connect(DB_PATH)
@@ -15,6 +14,7 @@ def get_connection():
 def init_liabilities_table():
 
     conn = get_connection()
+
     cursor = conn.cursor()
 
 
@@ -47,7 +47,8 @@ def init_liabilities_table():
             UNIQUE(
                 bank,
                 liability_type,
-                name
+                name,
+                owner
             )
         )
         """
@@ -55,6 +56,7 @@ def init_liabilities_table():
 
 
     conn.commit()
+
     conn.close()
 
 
@@ -62,6 +64,7 @@ def init_liabilities_table():
 def clear_liabilities():
 
     conn = get_connection()
+
     cursor = conn.cursor()
 
 
@@ -73,6 +76,7 @@ def clear_liabilities():
 
 
     conn.commit()
+
     conn.close()
 
 
@@ -83,13 +87,14 @@ def add_liability(
         name,
         owner,
         balance,
-        monthly_payment=0,
-        end_date=None,
-        asset=None,
-        purpose=None
+        monthly_payment,
+        end_date,
+        asset,
+        purpose
 ):
 
     conn = get_connection()
+
     cursor = conn.cursor()
 
 
@@ -109,12 +114,23 @@ def add_liability(
         )
 
         VALUES
-        (?,?,?,?,?,?,?,?,?)
+        (
+            ?,
+            ?,
+            ?,
+            ?,
+            ?,
+            ?,
+            ?,
+            ?,
+            ?
+        )
 
         ON CONFLICT(
             bank,
             liability_type,
-            name
+            name,
+            owner
         )
 
         DO UPDATE SET
@@ -124,8 +140,6 @@ def add_liability(
             monthly_payment = excluded.monthly_payment,
 
             end_date = excluded.end_date,
-
-            owner = excluded.owner,
 
             asset = excluded.asset,
 
@@ -148,6 +162,7 @@ def add_liability(
 
 
     conn.commit()
+
     conn.close()
 
 
@@ -155,6 +170,7 @@ def add_liability(
 def get_liabilities():
 
     conn = get_connection()
+
     cursor = conn.cursor()
 
 
@@ -179,7 +195,6 @@ def get_liabilities():
         WHERE status='active'
 
         ORDER BY balance DESC
-
         """
     )
 
@@ -197,6 +212,7 @@ def get_liabilities():
 def total_liabilities():
 
     conn = get_connection()
+
     cursor = conn.cursor()
 
 
@@ -204,70 +220,19 @@ def total_liabilities():
         """
         SELECT
 
-            COALESCE(
-                SUM(balance),
-                0
-            )
+        COALESCE(
+            SUM(balance),
+            0
+        )
 
         FROM liabilities
 
         WHERE status='active'
-
         """
     )
 
 
     result = cursor.fetchone()[0]
-
-
-    conn.close()
-
-
-    return result
-
-
-
-def find_liability(
-        bank,
-        liability_type,
-        name
-):
-
-    conn = get_connection()
-    cursor = conn.cursor()
-
-
-    cursor.execute(
-        """
-        SELECT *
-
-        FROM liabilities
-
-        WHERE
-
-            bank = ?
-
-        AND
-
-            liability_type = ?
-
-        AND
-
-            name = ?
-
-        LIMIT 1
-
-        """,
-
-        (
-            bank,
-            liability_type,
-            name
-        )
-    )
-
-
-    result = cursor.fetchone()
 
 
     conn.close()
