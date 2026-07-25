@@ -26,7 +26,7 @@ def create_document_id(file):
 
 
 
-def process_pdf(file):
+def process_pdf(file, force=False):
 
     print("Тип файла : PDF")
     print(f"Имя файла : {file.name}")
@@ -36,7 +36,7 @@ def process_pdf(file):
     document_id = create_document_id(file)
 
 
-    if document_exists(document_id):
+    if document_exists(document_id) and not force:
 
         print()
         print("Документ уже импортирован.")
