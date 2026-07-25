@@ -13,6 +13,7 @@ def get_connection():
 
 
 
+
 def init_liabilities_table():
 
     conn = get_connection()
@@ -130,6 +131,54 @@ def add_liability(
     conn.commit()
 
     conn.close()
+
+
+
+
+
+def save_loan(
+        loan,
+        summary,
+        owner=None
+):
+
+    """
+    Сохраняет кредит как обязательство PFOS.
+    """
+
+    init_liabilities_table()
+
+
+    name = (
+        f"Договор {loan.contract_number}"
+        if loan.contract_number
+        else "Кредит без номера"
+    )
+
+
+    add_liability(
+
+        bank=loan.bank,
+
+        liability_type=loan.loan_type,
+
+        name=name,
+
+        owner=owner or "",
+
+        balance=summary.get(
+            "balance",
+            0
+        ),
+
+        monthly_payment=loan.monthly_payment,
+
+        end_date=loan.end_date,
+
+        asset=None,
+
+        purpose=loan.loan_type
+    )
 
 
 
