@@ -5,20 +5,22 @@ from models.loan import Loan
 
 def _money(value: str) -> float:
 
-    value = value.replace("\xa0", "")
-    value = value.replace(" ", "")
-    value = value.replace(",", ".")
+    value = (
+        value
+        .replace("\xa0", "")
+        .replace(" ", "")
+        .replace(",", ".")
+    )
 
-    m = re.search(
-        r"(-?\d+(?:\.\d+)?)",
+    match = re.search(
+        r"\d+(?:\.\d+)?",
         value
     )
 
-    if not m:
+    if not match:
         return 0.0
 
-    return float(m.group(1))
-
+    return float(match.group())
 
 
 def parse_loan(text: str):
@@ -28,44 +30,30 @@ def parse_loan(text: str):
     loan.bank = "ВТБ"
 
 
-    # ---------------------------------------------
+    # -----------------------------
     # Номер договора
-    # ---------------------------------------------
+    # -----------------------------
 
-    m = re.search(
-        r"(?:Договор|Цессия)\s*№?\s*([0-9/\-]+)",
-        text,
-        re.IGNORECASE
+    contract = re.search(
+        r"(\d{3}/\d{4}-\d{7})",
+        text
     )
 
-    if m:
-        loan.contract_number = m.group(1)
+    if contract:
+        loan.contract_number = contract.group(1)
 
 
-
-    # ---------------------------------------------
-    # Счет списания
-    # ---------------------------------------------
-
-    m = re.search(
-        r"Счет списания\s*([\d*]{10,30})",
-        text,
-        re.IGNORECASE
-    )
-
-    if m:
-        loan.account = m.group(1)
-
-
-
-    # ---------------------------------------------
+    # -----------------------------
     # Тип кредита
-    # ---------------------------------------------
+    # -----------------------------
 
     lower = text.lower()
 
     if "авто" in lower:
         loan.loan_type = "Автокредит"
+
+    elif "ремонт" in lower:
+        loan.loan_type = "Кредит на ремонт"
 
     elif "ипот" in lower:
         loan.loan_type = "Ипотека"
@@ -74,102 +62,99 @@ def parse_loan(text: str):
         loan.loan_type = "Кредит"
 
 
-
-    # ---------------------------------------------
+    # -----------------------------
     # Выдача кредита
-    # ---------------------------------------------
+    # -----------------------------
 
     issued = 0.0
 
-    m = re.search(
-        r"([0-9\s\xa0,\.]+)\s*RUB\s*Выдача кредита",
+    issue_match = re.search(
+        r"(\d{2}\.\d{2}\.\d{4})\s+"
+        r"([\d\s\xa0,]+)\s+RUB\s+"
+        r"Выдача кредита",
         text,
-        re.IGNORECASE
+        re.DOTALL
     )
 
-    if m:
-        issued = _money(m.group(1))
+    if issue_match:
+
+        issued = _money(
+            issue_match.group(2)
+        )
 
 
-
-    # ---------------------------------------------
-    # Погашение тела кредита
-    # ---------------------------------------------
+    # -----------------------------
+    # Тело кредита
+    # -----------------------------
 
     principal = 0.0
 
-    values = re.findall(
-        r"(-?[0-9\s\xa0,\.]+)\s*RUB\s*Погашение кредита",
-        text,
-        re.IGNORECASE
+    principal_matches = re.findall(
+        r"(-?[\d\s\xa0,]+)\s+RUB\s+"
+        r"Погашение кредита",
+        text
     )
 
-    for amount in values:
-        principal += abs(_money(amount))
+    for value in principal_matches:
 
-
-
-    # ---------------------------------------------
-    # Погашение процентов
-    # ---------------------------------------------
-
-    interests = 0.0
-
-    values = re.findall(
-        r"(-?[0-9\s\xa0,\.]+)\s*RUB\s*Погашение процентов",
-        text,
-        re.IGNORECASE
-    )
-
-    for amount in values:
-        interests += abs(_money(amount))
-
-
-
-    # ---------------------------------------------
-    # Остаток
-    # ---------------------------------------------
-
-    loan.balance = max(
-        0.0,
-        round(
-            issued - principal,
-            2
+        principal += abs(
+            _money(value)
         )
+
+
+    # -----------------------------
+    # Проценты
+    # -----------------------------
+
+    interest = 0.0
+
+    interest_matches = re.findall(
+        r"(-?[\d\s\xa0,]+)\s+RUB\s+"
+        r"Погашение процентов",
+        text
     )
 
+    for value in interest_matches:
 
-    loan.monthly_payment = 0.0
-    loan.rate = 0.0
-    loan.end_date = None
+        interest += abs(
+            _money(value)
+        )
 
+
+    # -----------------------------
+    # Остаток
+    # -----------------------------
+
+    balance = round(
+        issued - principal,
+        2
+    )
+
+    if balance < 0:
+        balance = 0.0
+
+
+    loan.balance = balance
 
 
     return {
 
         "loan": loan,
 
-        "issued":
-            round(
-                issued,
-                2
-            ),
+        "issued": round(
+            issued,
+            2
+        ),
 
-        "principal_paid":
-            round(
-                principal,
-                2
-            ),
+        "principal_paid": round(
+            principal,
+            2
+        ),
 
-        "interest_paid":
-            round(
-                interests,
-                2
-            ),
+        "interest_paid": round(
+            interest,
+            2
+        ),
 
-        "balance":
-            round(
-                loan.balance,
-                2
-            )
+        "balance": balance
     }

@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Database
+database/*.db
+
+# Reports
+reports/*.txt
+
+# Temporary files
+*.log
+*.tmp
+
+# Environment
+.env
+
+# IDE
+.vscode/
+.idea/
