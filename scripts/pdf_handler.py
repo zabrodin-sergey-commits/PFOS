@@ -16,6 +16,9 @@ from database.documents import (
     save_document
 )
 
+from database.loan_repository import save_loan
+
+
 
 def create_document_id(file):
 
@@ -50,15 +53,10 @@ def process_pdf(file, force=False):
 
     pdf = fitz.open(file)
 
-
     text = ""
 
-
     for page in pdf:
-
         text += page.get_text()
-
-
 
     pdf.close()
 
@@ -74,21 +72,11 @@ def process_pdf(file, force=False):
 
 
 
-    #
-    # Создаем универсальный Document
-    #
-
     document = build_document(text)
 
 
 
-    #
-    # ВАЖНО:
-    # detector получает TEXT
-    #
-
     parser = detect_parser(text)
-
 
 
     if parser is None:
@@ -105,19 +93,32 @@ def process_pdf(file, force=False):
 
 
 
-    #
-    # Парсер получает Document
-    #
-
     statement = parser.parse(document)
 
 
 
+    save_document(
+        document_id,
+        file.name,
+        statement.bank
+    )
+
+
+
     #
-    # Если это кредит
+    # КРЕДИТ
     #
 
-    if hasattr(statement, "loan"):
+    if hasattr(statement, "loan") and statement.loan:
+
+
+        statement.loan.document_id = document_id
+
+
+        save_loan(
+            statement.loan
+        )
+
 
         print()
 
@@ -138,7 +139,13 @@ def process_pdf(file, force=False):
 
         print()
 
+        print("Кредит сохранен в liabilities")
+
+
+        print()
+
         print("Расчет:")
+
 
         for key, value in statement.loan_summary.items():
 
@@ -151,18 +158,13 @@ def process_pdf(file, force=False):
 
         print("Импорт завершен.")
 
-        save_document(
-            document_id,
-            file.name,
-            statement.bank
-        )
-
         return
 
 
 
+
     #
-    # Обычная выписка
+    # ОБЫЧНАЯ ВЫПИСКА
     #
 
     operations = statement.operations
@@ -178,7 +180,6 @@ def process_pdf(file, force=False):
         operation.owner = statement.owner
 
 
-
         operation.description = normalize_description(
             operation.description
         )
@@ -190,14 +191,6 @@ def process_pdf(file, force=False):
 
     operations = remove_internal_transfers(
         operations
-    )
-
-
-
-    save_document(
-        document_id,
-        file.name,
-        statement.bank
     )
 
 
@@ -216,6 +209,7 @@ def process_pdf(file, force=False):
         f"Внутренних переводов найдено: "
         f"{sum(1 for x in operations if getattr(x,'is_transfer',False))}"
     )
+
 
 
     print()
@@ -244,7 +238,6 @@ def process_pdf(file, force=False):
     print()
 
     print("===== Операции =====")
-
 
 
     for operation in operations[:10]:
