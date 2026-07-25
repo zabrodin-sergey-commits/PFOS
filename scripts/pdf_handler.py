@@ -31,7 +31,9 @@ def process_pdf(file, force=False):
     print("Тип файла : PDF")
     print(f"Имя файла : {file.name}")
 
+
     init_documents_table()
+
 
     document_id = create_document_id(file)
 
@@ -45,12 +47,18 @@ def process_pdf(file, force=False):
         return
 
 
+
     pdf = fitz.open(file)
+
 
     text = ""
 
+
     for page in pdf:
+
         text += page.get_text()
+
+
 
     pdf.close()
 
@@ -66,10 +74,21 @@ def process_pdf(file, force=False):
 
 
 
+    #
+    # Создаем универсальный Document
+    #
+
     document = build_document(text)
 
 
-    parser = detect_parser(document.text)
+
+    #
+    # ВАЖНО:
+    # detector получает TEXT
+    #
+
+    parser = detect_parser(text)
+
 
 
     if parser is None:
@@ -82,23 +101,82 @@ def process_pdf(file, force=False):
 
 
 
+    print("Парсер найден")
+
+
+
+    #
+    # Парсер получает Document
+    #
+
     statement = parser.parse(document)
 
 
+
+    #
+    # Если это кредит
+    #
+
+    if hasattr(statement, "loan"):
+
+        print()
+
+        print("===== КРЕДИТ =====")
+
+        print(
+            f"Тип        : {statement.loan.loan_type}"
+        )
+
+        print(
+            f"Договор    : {statement.loan.contract_number}"
+        )
+
+        print(
+            f"Остаток    : {statement.loan.balance} RUB"
+        )
+
+
+        print()
+
+        print("Расчет:")
+
+        for key, value in statement.loan_summary.items():
+
+            print(
+                f"{key:<20}: {value}"
+            )
+
+
+        print()
+
+        print("Импорт завершен.")
+
+        save_document(
+            document_id,
+            file.name,
+            statement.bank
+        )
+
+        return
+
+
+
+    #
+    # Обычная выписка
+    #
 
     operations = statement.operations
 
 
 
-    # --------------------------------------------------
-    # Обработка обычных операций
-    # --------------------------------------------------
-
     for operation in operations:
 
         operation.bank = statement.bank
+
         operation.account = statement.account
+
         operation.owner = statement.owner
+
 
 
         operation.description = normalize_description(
@@ -123,14 +201,11 @@ def process_pdf(file, force=False):
     )
 
 
-    # Сохраняем операции только если они есть
 
-    if operations:
-
-        save_operations(
-            operations,
-            document_id
-        )
+    save_operations(
+        operations,
+        document_id
+    )
 
 
 
@@ -139,66 +214,37 @@ def process_pdf(file, force=False):
 
     print(
         f"Внутренних переводов найдено: "
-        f"{sum(1 for x in operations if getattr(x, 'internal_transfer', False))}"
+        f"{sum(1 for x in operations if getattr(x,'is_transfer',False))}"
     )
-
 
 
     print()
 
     print("===== Выписка =====")
 
-    print(f"Банк       : {statement.bank}")
-    print(f"Документ   : {statement.document_type}")
-    print(f"Счет       : {statement.account}")
-    print(f"Владелец   : {statement.owner}")
 
+    print(
+        f"Банк       : {statement.bank}"
+    )
 
+    print(
+        f"Документ   : {statement.document_type}"
+    )
 
-    # --------------------------------------------------
-    # Вывод кредита
-    # --------------------------------------------------
+    print(
+        f"Счет       : {statement.account}"
+    )
 
-    if hasattr(statement, "loan"):
-
-        print()
-        print("===== КРЕДИТ =====")
-
-        loan = statement.loan
-
-
-        print(
-            f"Тип        : {getattr(loan, 'loan_type', '')}"
-        )
-
-        print(
-            f"Договор    : {getattr(loan, 'contract_number', '')}"
-        )
-
-        print(
-            f"Остаток    : {getattr(loan, 'balance', 0)} RUB"
-        )
-
-
-
-        if hasattr(statement, "loan_summary"):
-
-            print()
-
-            print("Расчет:")
-
-
-            for key, value in statement.loan_summary.items():
-
-                print(
-                    f"{key:20}: {value}"
-                )
+    print(
+        f"Владелец   : {statement.owner}"
+    )
 
 
 
     print()
 
     print("===== Операции =====")
+
 
 
     for operation in operations[:10]:
