@@ -12,12 +12,9 @@ def get_connection():
 
 
 
-
-
 def init_liabilities_table():
 
     conn = get_connection()
-
     cursor = conn.cursor()
 
 
@@ -45,37 +42,38 @@ def init_liabilities_table():
 
             purpose TEXT,
 
-            status TEXT DEFAULT 'active'
+            status TEXT DEFAULT 'active',
+
+            UNIQUE(
+                bank,
+                liability_type,
+                name
+            )
         )
         """
     )
 
 
     conn.commit()
-
     conn.close()
-
-
 
 
 
 def clear_liabilities():
 
     conn = get_connection()
-
     cursor = conn.cursor()
 
 
     cursor.execute(
-        "DELETE FROM liabilities"
+        """
+        DELETE FROM liabilities
+        """
     )
 
 
     conn.commit()
-
     conn.close()
-
-
 
 
 
@@ -85,14 +83,13 @@ def add_liability(
         name,
         owner,
         balance,
-        monthly_payment,
-        end_date,
-        asset,
-        purpose
+        monthly_payment=0,
+        end_date=None,
+        asset=None,
+        purpose=None
 ):
 
     conn = get_connection()
-
     cursor = conn.cursor()
 
 
@@ -113,7 +110,29 @@ def add_liability(
 
         VALUES
         (?,?,?,?,?,?,?,?,?)
+
+        ON CONFLICT(
+            bank,
+            liability_type,
+            name
+        )
+
+        DO UPDATE SET
+
+            balance = excluded.balance,
+
+            monthly_payment = excluded.monthly_payment,
+
+            end_date = excluded.end_date,
+
+            owner = excluded.owner,
+
+            asset = excluded.asset,
+
+            purpose = excluded.purpose
+
         """,
+
         (
             bank,
             liability_type,
@@ -129,65 +148,13 @@ def add_liability(
 
 
     conn.commit()
-
     conn.close()
-
-
-
-
-
-def save_loan(
-        loan,
-        summary,
-        owner=None
-):
-
-    """
-    Сохраняет кредит как обязательство PFOS.
-    """
-
-    init_liabilities_table()
-
-
-    name = (
-        f"Договор {loan.contract_number}"
-        if loan.contract_number
-        else "Кредит без номера"
-    )
-
-
-    add_liability(
-
-        bank=loan.bank,
-
-        liability_type=loan.loan_type,
-
-        name=name,
-
-        owner=owner or "",
-
-        balance=summary.get(
-            "balance",
-            0
-        ),
-
-        monthly_payment=loan.monthly_payment,
-
-        end_date=loan.end_date,
-
-        asset=None,
-
-        purpose=loan.loan_type
-    )
-
-
 
 
 
 def get_liabilities():
 
     conn = get_connection()
-
     cursor = conn.cursor()
 
 
@@ -207,12 +174,9 @@ def get_liabilities():
             purpose,
             status
 
-
         FROM liabilities
 
-
         WHERE status='active'
-
 
         ORDER BY balance DESC
 
@@ -230,28 +194,80 @@ def get_liabilities():
 
 
 
-
-
 def total_liabilities():
 
     conn = get_connection()
-
     cursor = conn.cursor()
 
 
     cursor.execute(
         """
         SELECT
-        COALESCE(SUM(balance),0)
+
+            COALESCE(
+                SUM(balance),
+                0
+            )
 
         FROM liabilities
 
         WHERE status='active'
+
         """
     )
 
 
     result = cursor.fetchone()[0]
+
+
+    conn.close()
+
+
+    return result
+
+
+
+def find_liability(
+        bank,
+        liability_type,
+        name
+):
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+
+    cursor.execute(
+        """
+        SELECT *
+
+        FROM liabilities
+
+        WHERE
+
+            bank = ?
+
+        AND
+
+            liability_type = ?
+
+        AND
+
+            name = ?
+
+        LIMIT 1
+
+        """,
+
+        (
+            bank,
+            liability_type,
+            name
+        )
+    )
+
+
+    result = cursor.fetchone()
 
 
     conn.close()
