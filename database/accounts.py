@@ -1,197 +1,178 @@
 import sqlite3
-from pathlib import Path
 
-
-DB_PATH = Path("database/pfos.db")
-
+DATABASE = "database/pfos.db"
 
 
 def get_connection():
-
-    return sqlite3.connect(DB_PATH)
-
-
-
+    conn = sqlite3.connect(DATABASE)
+    conn.row_factory = sqlite3.Row
+    return conn
 
 
 def init_accounts_table():
-
     conn = get_connection()
     cursor = conn.cursor()
 
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS accounts
+    (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
 
-    cursor.execute(
-        """
-        CREATE TABLE IF NOT EXISTS accounts
-        (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+        bank TEXT,
 
-            bank TEXT NOT NULL,
+        owner TEXT,
 
-            name TEXT NOT NULL,
+        account_name TEXT,
 
-            owner TEXT,
+        account_type TEXT,
 
-            account_type TEXT,
+        currency TEXT DEFAULT 'RUB',
 
-            purpose TEXT,
+        balance REAL DEFAULT 0,
 
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        status TEXT DEFAULT 'active',
 
-            UNIQUE(bank,name,owner)
-        )
-        """
+        opened_at TEXT,
+
+        closed_at TEXT,
+
+        UNIQUE(bank, owner, account_name)
     )
-
+    """)
 
     conn.commit()
     conn.close()
 
 
-
-
-
-def create_account(
+def add_account(
     bank,
-    name,
     owner,
+    account_name,
     account_type,
-    purpose
+    currency="RUB",
+    balance=0,
+    status="active",
+    opened_at=None,
+    closed_at=None
 ):
+    init_accounts_table()
 
     conn = get_connection()
     cursor = conn.cursor()
 
-
-    cursor.execute(
-        """
-        SELECT id
-        FROM accounts
-
-        WHERE
-            bank=?
-            AND name=?
-            AND owner=?
-
-        """,
-        (
-            bank,
-            name,
-            owner
-        )
+    cursor.execute("""
+    INSERT INTO accounts
+    (
+        bank,
+        owner,
+        account_name,
+        account_type,
+        currency,
+        balance,
+        status,
+        opened_at,
+        closed_at
     )
 
-
-    exists = cursor.fetchone()
-
-
-    if exists:
-
-        conn.close()
-
-        return exists[0]
-
-
-
-    cursor.execute(
-        """
-        INSERT INTO accounts
-        (
-            bank,
-            name,
-            owner,
-            account_type,
-            purpose
-        )
-
-        VALUES
-        (?,?,?,?,?)
-
-        """,
-        (
-            bank,
-            name,
-            owner,
-            account_type,
-            purpose
-        )
+    VALUES
+    (
+        ?,?,?,?,?,?,?,?,?
     )
 
+    ON CONFLICT(bank, owner, account_name)
 
-    account_id = cursor.lastrowid
+    DO UPDATE SET
 
+        account_type=excluded.account_type,
+        currency=excluded.currency,
+        balance=excluded.balance,
+        status=excluded.status,
+        opened_at=excluded.opened_at,
+        closed_at=excluded.closed_at
+    """,
+    (
+        bank,
+        owner,
+        account_name,
+        account_type,
+        currency,
+        balance,
+        status,
+        opened_at,
+        closed_at
+    ))
 
     conn.commit()
-
     conn.close()
-
-
-    return account_id
-
-
-
 
 
 def get_accounts():
+    init_accounts_table()
 
     conn = get_connection()
 
     cursor = conn.cursor()
 
-
-    cursor.execute(
-        """
-        SELECT
-
-            id,
-            bank,
-            name,
-            owner,
-            account_type,
-            purpose
-
+    cursor.execute("""
+        SELECT *
         FROM accounts
-
-        ORDER BY id
-
-        """
-    )
-
+        WHERE status='active'
+        ORDER BY bank, account_name
+    """)
 
     rows = cursor.fetchall()
 
-
     conn.close()
 
-
-    return rows
-
+    return [dict(row) for row in rows]
 
 
-
-
-def clear_accounts():
-
+def update_balance(account_id, balance):
     conn = get_connection()
 
     cursor = conn.cursor()
 
-
-    cursor.execute(
-        """
-        DELETE FROM accounts
-        """
-    )
-
-
-    cursor.execute(
-        """
-        DELETE FROM sqlite_sequence
-        WHERE name='accounts'
-        """
-    )
-
+    cursor.execute("""
+        UPDATE accounts
+        SET balance=?
+        WHERE id=?
+    """,
+    (
+        balance,
+        account_id
+    ))
 
     conn.commit()
+    conn.close()
+
+
+def find_account(bank, owner, account_name):
+    conn = get_connection()
+
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT *
+        FROM accounts
+        WHERE
+            bank=?
+        AND owner=?
+        AND account_name=?
+    """,
+    (
+        bank,
+        owner,
+        account_name
+    ))
+
+    row = cursor.fetchone()
 
     conn.close()
+
+    return dict(row) if row else None
+
+
+def total_balance():
+    accounts = get_accounts()
+
+    return sum(a["balance"] for a in accounts)
